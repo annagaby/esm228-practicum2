@@ -60,36 +60,79 @@ e. Don't Know
 
 *Challenge of drawing a representative sample*: donors satisfied with the program are more likely to respond than unsatisfied donors, creating a response bias
 
-*Sampling procedure*: Stratified samplying of on-time donors and recurring donors
-
-## Conceptual practice: stratification
+*Sampling procedure*: Stratified sampling of one-time donors and recurring donors
 
 
 
 ## DeclareDesign()
 
 ```{r declare-pop}
+# using two answers
+# population has 200 donors, with 60% of donors being recurring and 40% one-time donors
 set.seed(8) 
 population <- declare_population(
-  donors = add_level(N=500, 
-     recurring=draw_binary(N=N, prob = 0.5),
-     satisfied=correlate(given = recurring, rho = 0.5,
-                         draw_binary, prob = 0.5)
+  donors = add_level(N=200, 
+     recurring=draw_binary(N=N, prob = 0.6), # 60% recurring donors
+     satisfied=correlate(given = recurring, rho = 0.5, # rho: correlation coefficient between -1 and 1
+                         draw_binary, prob = 0.8) # 80% are satisfied
 ))
+# donor satisfaction is correlated to whether or not they are recurrent donors
 
+pop <- population() 
+
+# table
+kable(table(pop$recurring,pop$satisfied)) %>% 
+  add_header_above(c("recurring"=1,"satisfied"=2))
+
+# we are interested in the mean satisfaction
 my_estimand <- declare_estimands(mean(satisfied),
                                  label = "Ybar")
 ```
 
+```{r}
+# using five answers
+population <- declare_population(fabricate(
+  N = 200,
+  recurring = draw_binary(prob = 0.6, N),
+  satisfaction = draw_ordered(
+    x = rnorm(N, mean = 0.5 + 0.5 * recurring),
+    # centered at 1 (satisfied) for recurring and at 0.5 (break between neutral and satisfied) for one-time donors
+    breaks = c(-1.5,-0.5, 0.5, 1.5),
+    break_labels = c(
+      "Vey disatisfied",
+      "Disatisfied",
+      "Neutral",
+      "Satisfied",
+      "Very satisfied"
+    )
+  )
+))
+
+pop <- population()
+
+# table
+kable(table(pop$satisfaction, pop$recurring)) %>% 
+  add_header_above(c("recurring"=1,"satisfied"=2))
+
+# we are interested in the mean satisfaction
+my_estimand <- declare_estimands(mean(satisfaction),
+                                 label = "Ybar")
+```
+
+
+
+
 ## DeclareDesign()
 
 ```{r declare-report}
+# assign probability of responding to survey (50% for recurring, 30% for one-time)
 reporting <- declare_assignment(blocks=recurring,
                   assignment_variable = "R",
-                  block_prob=c(0.2,0.5))
+                  block_prob=c(0.3,0.5)) # order here?
 
+# sample 20 recurring donors and 40 one-time donors
 sampling <- declare_sampling(strata=recurring,
-                             strata_n=c(175,75))
+                             strata_n=c(20, 40))
 
 ```
 
@@ -106,8 +149,8 @@ strata_weighted_mean <- function(data){
   
   estimate = data %>% filter(R==1) %>%
     group_by(recurring) %>% 
-    summarise(mean=mean(satisfied)) %>%
-    mutate(prop=c(0.5,0.5)) %>%
+    summarise(mean=mean(satisfaction)) %>%
+    mutate(prop=c(0.5,0.5)) %>% # what does this mean?
     mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
     sum())
 } #just use this function, custom
@@ -119,12 +162,12 @@ strata_weighted_mean <- function(data){
 ```{r diagnosis, cache=TRUE}
 
 answer <- declare_estimator(
-  handler = tidy_estimator(strata_weighted_mean),
-  estimand = my_estimand)
+  handler = tidy_estimator(strata_weighted_mean), # weighted mean
+  estimand = my_estimand) # mean
 
 design <- population + my_estimand + reporting +
           sampling + answer
-diagnosis <- diagnose_design(design, sims = 1000)
+diagnosis <- diagnose_design(design, sims = 100) # simulate design 100 times
 
 diagnosis$diagnosands_df[,c(4,5,12,14)] %>%
   kable()
