@@ -25,14 +25,12 @@ library(kableExtra)
 
 **Goal**: Assess the level of satisfaction of donors with the program.
 
-"How satisfied are you with the restoration work done by The Freshwater Trust?"
-
-a. Very Satisfied
-b. Somewhat Satisfied
-c. Somewhat Unsatisfied
-d. Very Unsatisfied
-e. Don't Know
-
+“Overall, how satisfied or dissatisfied are you with the restoration work done by the Freshwater Trust?"
+a. Very Dissatisfied
+b. Somewhat dissatisfied
+c. Neither satisfied nor dissatisfied
+d. Somewhat Satisfied
+e. Very Satisfied
 
 ## Source & Rationale & Unit
 
@@ -56,7 +54,7 @@ e. Don't Know
 
 ## Target Population & Challenges
 
-*Target Population*: individuals who have made donations
+*Target Population*: donors
 
 *Challenge of drawing a representative sample*: donors satisfied with the program are more likely to respond than unsatisfied donors, creating a response bias
 
@@ -67,55 +65,27 @@ e. Don't Know
 ## DeclareDesign()
 
 ```{r declare-pop}
-# using two answers
-# population has 200 donors, with 60% of donors being recurring and 40% one-time donors
-set.seed(8) 
-population <- declare_population(
-  donors = add_level(N=200, 
-     recurring=draw_binary(N=N, prob = 0.6), # 60% recurring donors
-     satisfied=correlate(given = recurring, rho = 0.5, # rho: correlation coefficient between -1 and 1
-                         draw_binary, prob = 0.8) # 80% are satisfied
-))
-# donor satisfaction is correlated to whether or not they are recurrent donors
-
-pop <- population() 
-
-# table
-kable(table(pop$recurring,pop$satisfied)) %>% 
-  add_header_above(c("recurring"=1,"satisfied"=2))
-
-# we are interested in the mean satisfaction
-my_estimand <- declare_estimands(mean(satisfied),
-                                 label = "Ybar")
-```
-
-```{r}
-# using five answers
 population <- declare_population(fabricate(
   N = 200,
-  recurring = draw_binary(prob = 0.6, N),
+  recurring = draw_binary(prob = 0.6, N), # 60% of donors are recurring donors
   satisfaction = draw_ordered(
-    x = rnorm(N, mean = 0.5 + 0.5 * recurring),
-    # centered at 1 (satisfied) for recurring and at 0.5 (break between neutral and satisfied) for one-time donors
-    breaks = c(-1.5,-0.5, 0.5, 1.5),
-    break_labels = c(
-      "Vey disatisfied",
-      "Disatisfied",
-      "Neutral",
-      "Satisfied",
-      "Very satisfied"
-    )
+    x = rnorm(N, mean = 3.5 + 0.5 * recurring),
+    # centered at 4 (satisfied) for recurring and at 3.5 (break between neutral and satisfied) for one-time donors
+    breaks = c(1.5, 2.5, 3.5, 4.5),
+    break_labels = c(1:5)), #  interval representation
+  sat_num = as.numeric(satisfaction) # changed satisfaction to numeric
   )
-))
+)
 
 pop <- population()
 
-# table
-kable(table(pop$satisfaction, pop$recurring)) %>% 
-  add_header_above(c("recurring"=1,"satisfied"=2))
+# population table (1 = Very Dissatisfied, 2 = Somewhat dissatisfied, 3 = Neither satisfied nor dissatisfied, 4 = Somewhat Satisfied, 5 = Very Satisfied)
+pop_table <- kable(table(pop$satisfaction, pop$recurring), row.names = T) %>% add_header_above(c("satisfaction"=1, "recurring"=2))
+
+pop_table
 
 # we are interested in the mean satisfaction
-my_estimand <- declare_estimands(mean(satisfaction),
+my_estimand <- declare_estimands(mean(sat_num),
                                  label = "Ybar")
 ```
 
@@ -149,7 +119,7 @@ strata_weighted_mean <- function(data){
   
   estimate = data %>% filter(R==1) %>%
     group_by(recurring) %>% 
-    summarise(mean=mean(satisfaction)) %>%
+    summarise(mean=mean(sat_num)) %>%
     mutate(prop=c(0.5,0.5)) %>% # what does this mean?
     mutate(sub.mean=mean*prop) %>% pull(sub.mean) %>% 
     sum())
